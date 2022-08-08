@@ -17,6 +17,7 @@ LEFT = "l"
 RIGHT = "r"
 SLIGHT_LEFT = "L"
 SLIGHT_RIGHT = "R"
+import time
 
 class RouteController(ABC):
     """
@@ -50,7 +51,7 @@ class RouteController(ABC):
             path_length = 0
             i = 0
 
-            #the while is used to make sure the vehicle will not assume it arrives the destination beacuse the target edge is too short.
+            #the while is used to make sure the vehicle will not assume it arrives the destination bescuse the target edge is too short.
             while path_length <= max(vehicle.current_speed, 20):
                 if current_target_edge == vehicle.destination:
                     break
@@ -85,16 +86,69 @@ class RouteController(ABC):
         pass
 
 
-class RandomPolicy(RouteController):
+class LWRController(RouteController):
     """
+    My implementation of the Lighthill-Whitham-Richards model treats a certain number of cars within a network like an
+    interval. Through this, without requiring sensors in the network, the LWRController uses the PDE Conservation Law to
+    determine whether there is a traffic jam/slowdown and thus makes decisions based on those observations.  
     Example class for a custom scheduling algorithm.
     Utilizes a random decision policy until vehicle destination is within reach,
     then targets the vehicle destination.
     """
+    congested_edge = []
+    
+
+    # def make_decisions(self, vehicles, connection_info):
+
+    #     local_targets = {}
+        
+    #     for vehicle in vehicles:
+    #         start_edge = vehicle.current_edge
+
+
+
+    #     return 0
+
+    # # calculate the change in flow rate and density with a car acting as an interval 
+    # def del_density_flow(vehicle):
+
+
+    #     calculate_density_flow(self, vehicle)
+
+        
+
+    #     return 0
+    
+    
+    # def calculate_density_flow(self, vehicle):
+        
+    #     # calculate the speed of the car behind
+    #     follow_ID, follow_distance = vehicle.getFollower(self,vehicle, dist=0.0)
+    #     follow_speed = vehicle.getFollowSpeed(self, follow_ID,)
+    #     # calculate the speed of the car in front
+
+    #     # calculate the density of cars on a certain edge in a given mile
+    #     edge_length = self.connection_info.edge_length_dict[current_edge]
+    #     vehicle_count = self.connection_info.edge_vehicle_count[current_edge] - 1
+
+    #     density = vehicle_count / edge_length
+    #     # if needed, finded the length of the edge
+
+    #     # first, calculate the del speed between vehicles and multiply by the k value
+
+    #     # wait another second or millisecond --> do the following again
+
+    #     return density_one, density_two, flow_rate_one, flow_rate_two
+
+    #     # more possible ideas 
+    #     # """ rely on previous vehicle info from for in loop to calculate  speed/velocity"""
+
+
     def __init__(self, connection_info):
         super().__init__(connection_info)
 
     def make_decisions(self, vehicles, connection_info):
+        
         """
         A custom scheduling algorithm can be written in between the 'Your algo...' comments.
         -For each car in the vehicle batch, your algorithm should provide a list of future decisions.
@@ -115,12 +169,15 @@ class RandomPolicy(RouteController):
 
         local_targets = {}
         for vehicle in vehicles:
-            start_edge = vehicle.current_edge
-
             '''
             Your algo starts here
             '''
             decision_list = []
+
+            congested_signal = False
+            
+
+
 
             i = 0
             while i < 10:  # choose the number of decisions to make in advanced; depends on the algorithm and network
@@ -148,3 +205,30 @@ class RandomPolicy(RouteController):
             local_targets[vehicle.vehicle_id] = self.compute_local_target(decision_list, vehicle)
 
         return local_targets
+
+    def calculate_density_flow(vehicle):
+
+        #calculate speed
+        follower_speed = vehicle.follow_speed
+        leader_ID = vehicle.getLeader(vehicle.vehicle_ID, dist=0.0)
+        leader_speed = getSpeed(leader_ID)
+
+        #change in speed
+        del_speed  = follower_speed - leader_speed
+
+        # calculate the density of cars on a certain edge in a given mile
+        edge_length = vehicle.connection_info.edge_length_dict[current_edge]
+        vehicle_count = vehicle.connection_info.edge_vehicle_count[current_edge] - 1
+        density = vehicle_count / edge_length
+
+        flow_rate = density * del_speed
+
+        return flow_rate, density
+
+    def del_density_flow(flow_rate_one, density_one, flow_rate_two, density_two):
+        del_flow_rate = flow_rate_two - flow_rate_one 
+        del_density = density_two - density_one
+
+        return del_flow_rate, del_density
+
+    
