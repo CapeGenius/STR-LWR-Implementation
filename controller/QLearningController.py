@@ -1,5 +1,5 @@
-from controller.RouteController import RouteController
-from core.Util import ConnectionInfo, Vehicle
+from RouteController import RouteController
+from Util import ConnectionInfo, Vehicle
 from keras.models import load_model
 import numpy as np
 import traci
@@ -16,7 +16,7 @@ class QLearningPolicy(RouteController):
         for vehicle in vehicles:
 
             wrong_decision = False
-            total_length = 0.0
+            total_length = 0. 
             start_edge = vehicle.current_edge
             decision_list = []
 

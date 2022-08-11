@@ -1,3 +1,4 @@
+from threading import Thread
 from abc import ABC, abstractmethod
 import random
 import os
@@ -17,6 +18,9 @@ LEFT = "l"
 RIGHT = "r"
 SLIGHT_LEFT = "L"
 SLIGHT_RIGHT = "R"
+import time
+from queue import Queue
+from time import sleep, perf_counter
 
 class RouteController(ABC):
     """
@@ -50,7 +54,7 @@ class RouteController(ABC):
             path_length = 0
             i = 0
 
-            #the while is used to make sure the vehicle will not assume it arrives the destination beacuse the target edge is too short.
+            #the while is used to make sure the vehicle will not assume it arrives the destination bescuse the target edge is too short.
             while path_length <= max(vehicle.current_speed, 20):
                 if current_target_edge == vehicle.destination:
                     break
@@ -85,16 +89,69 @@ class RouteController(ABC):
         pass
 
 
-class RandomPolicy(RouteController):
+class LWRController(RouteController):
     """
+    My implementation of the Lighthill-Whitham-Richards model treats a certain number of cars within a network like an
+    interval. Through this, without requiring sensors in the network, the LWRController uses the PDE Conservation Law to
+    determine whether there is a traffic jam/slowdown and thus makes decisions based on those observations.  
     Example class for a custom scheduling algorithm.
     Utilizes a random decision policy until vehicle destination is within reach,
     then targets the vehicle destination.
     """
+    congested_edge = {}
+    
+
+    # def make_decisions(self, vehicles, connection_info):
+
+    #     local_targets = {}
+        
+    #     for vehicle in vehicles:
+    #         start_edge = vehicle.current_edge
+
+
+
+    #     return 0
+
+    # # calculate the change in flow rate and density with a car acting as an interval 
+    # def del_density_flow(vehicle):
+
+
+    #     calculate_density_flow(self, vehicle)
+
+        
+
+    #     return 0
+    
+    
+    # def calculate_density_flow(self, vehicle):
+        
+    #     # calculate the speed of the car behind
+    #     follow_ID, follow_distance = vehicle.getFollower(self,vehicle, dist=0.0)
+    #     follow_speed = vehicle.getFollowSpeed(self, follow_ID,)
+    #     # calculate the speed of the car in front
+
+    #     # calculate the density of cars on a certain edge in a given mile
+    #     edge_length = self.connection_info.edge_length_dict[current_edge]
+    #     vehicle_count = self.connection_info.edge_vehicle_count[current_edge] - 1
+
+    #     density = vehicle_count / edge_length
+    #     # if needed, finded the length of the edge
+
+    #     # first, calculate the del speed between vehicles and multiply by the k value
+
+    #     # wait another second or millisecond --> do the following again
+
+    #     return density_one, density_two, flow_rate_one, flow_rate_two
+
+    #     # more possible ideas 
+    #     # """ rely on previous vehicle info from for in loop to calculate  speed/velocity"""
+
+
     def __init__(self, connection_info):
         super().__init__(connection_info)
 
     def make_decisions(self, vehicles, connection_info):
+        
         """
         A custom scheduling algorithm can be written in between the 'Your algo...' comments.
         -For each car in the vehicle batch, your algorithm should provide a list of future decisions.
@@ -113,34 +170,34 @@ class RandomPolicy(RouteController):
         :return: local_targets: {vehicle_id, target_edge}, where target_edge is a local target to send to TRACI
         """
 
-        local_targets = {}
-        for vehicle in vehicles:
-            start_edge = vehicle.current_edge
+        
 
+        local_targets = {}
+        congested_edge = []
+
+        for vehicle in vehicles:
             '''
             Your algo starts here
             '''
             decision_list = []
+            
+            # create a list of maps
+            unvisited = {edge: 1000000000 for edge in self.connection_info.edge_list} # map of unvisited edges
+            visited = {} # map of visited edges
 
-            i = 0
-            while i < 10:  # choose the number of decisions to make in advanced; depends on the algorithm and network
-                choice = self.direction_choices[random.randint(0, 5)]  # 6 choices available in total
+            current_edge = vehicle.current_edge
 
-                # dead end
-                if len(self.connection_info.outgoing_edges_dict[start_edge].keys()) == 0:
-                    break
+            #setting up djikstra stuff
+            current_distance = self.connection_info.edge_length_dict[current_edge]
+            unvisited[current_edge] = current_distance
+            path_lists = {edge: [] for edge in self.connection_info.edge_list} #stores shortest path to each edge using directions
+            
+            # begin multithread operations and allow for communication between both threads
+            t1 = Thread(target = djikstra_thread, args=(self, vehicle, visited, unvisited, path_lists, current_edge,))
+            t2 = Thread(target = lwr_thread, args=(self, vehicle,))
 
-                # make sure to check if it's a valid edge
-                if choice in self.connection_info.outgoing_edges_dict[start_edge].keys():
-                    decision_list.append(choice)
-                    start_edge = self.connection_info.outgoing_edges_dict[start_edge][choice]
-
-                    if i > 0:
-                        if decision_list[i-1] == decision_list[i] and decision_list[i] == 't':
-                            # stuck in a turnaround loop, let TRACI remove vehicle
-                            break
-
-                    i += 1
+            t1.start()
+            t2.start()
 
             '''
             Your algo ends here
@@ -148,3 +205,79 @@ class RandomPolicy(RouteController):
             local_targets[vehicle.vehicle_id] = self.compute_local_target(decision_list, vehicle)
 
         return local_targets
+
+    def calculate_density_flow(vehicle):
+
+        #calculate speed
+        follower_speed = vehicle.follow_speed
+        leader_ID = vehicle.getLeader(vehicle.vehicle_ID, dist=0.0)
+        leader_speed = getSpeed(leader_ID)
+
+        #change in speed
+        del_speed  = follower_speed - leader_speed
+
+        # calculate the density of cars on a certain edge in a given mile
+        edge_length = vehicle.connection_info.edge_length_dict[current_edge]
+        vehicle_count = vehicle.connection_info.edge_vehicle_count[current_edge] - 1
+        density = vehicle_count / edge_length
+
+        flow_rate = density * del_speed
+
+        return flow_rate, density
+
+    # djikstra policy thread
+    def djikstra_thread(self, vehicle, visited, unvisited, path_lists, current_edge):
+        while True:
+                
+                if current_edge not in self.connection_info.outgoing_edges_dict.keys():
+                    continue
+                                
+                for direction, outgoing_edge in self.connection_info.outgoing_edges_dict[current_edge].items():
+                    if outgoing_edge not in unvisited:
+                        continue
+                    edge_length = self.connection_info.edge_length_dict[outgoing_edge]
+                    new_distance = current_distance + edge_length
+                    if new_distance < unvisited[outgoing_edge]:
+                        unvisited[outgoing_edge] = new_distance
+                        current_path = copy.deepcopy(path_lists[current_edge])
+                        current_path.append(direction)
+                        path_lists[outgoing_edge] = copy.deepcopy(current_path)
+                        #print("{} + {} : {} + {}".format(path_lists[current_edge], direction, path_edge_lists[current_edge], outgoing_edge))
+
+                
+                
+                visited[current_edge] = current_distance
+                
+                
+                del unvisited[current_edge]
+                
+                
+                if not unvisited:
+                    break
+                if current_edge==vehicle.destination:
+                    break
+                possible_edges = [edge for edge in unvisited.items() if edge[1]]
+                current_edge, current_distance = sorted(possible_edges, key=lambda x: x[1])[0]
+
+        return null
+
+    def diff_density_flow(self, vehicle):
+        
+        # calculate the flow rates and density rates between two time intervals
+        flow_rate_one, density_one = self.calculate_density_flow(vehicle)
+        time.sleep(0.5)
+        flow_rate_two, density_two = self.calculate_density_flow(vehicle)
+
+        # calculate the rate of change
+        del_flow_rate = flow_rate_one - flow_rate_two
+        del_density = density_one - density_two
+
+        # calculate the congestion derivative
+        congestion_derivative = del_flow_rate / del_density
+
+        return congestion_derivative
+
+    def lwr_thread(self, vehicle):
+
+        
+        return none
