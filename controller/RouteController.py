@@ -1,4 +1,4 @@
-from threading import Thread
+from threading import Thread, Event
 from abc import ABC, abstractmethod
 import random
 import os
@@ -19,7 +19,7 @@ RIGHT = "r"
 SLIGHT_LEFT = "L"
 SLIGHT_RIGHT = "R"
 import time
-from queue import Queue
+from queue import Queue 
 from time import sleep, perf_counter
 
 class RouteController(ABC):
@@ -98,53 +98,10 @@ class LWRController(RouteController):
     Utilizes a random decision policy until vehicle destination is within reach,
     then targets the vehicle destination.
     """
-    congested_edge = {}
-    
+    congested_edge = () #global data structure that will be accessed between threads
+    congestion_event = threading.Event()
 
-    # def make_decisions(self, vehicles, connection_info):
-
-    #     local_targets = {}
-        
-    #     for vehicle in vehicles:
-    #         start_edge = vehicle.current_edge
-
-
-
-    #     return 0
-
-    # # calculate the change in flow rate and density with a car acting as an interval 
-    # def del_density_flow(vehicle):
-
-
-    #     calculate_density_flow(self, vehicle)
-
-        
-
-    #     return 0
-    
-    
-    # def calculate_density_flow(self, vehicle):
-        
-    #     # calculate the speed of the car behind
-    #     follow_ID, follow_distance = vehicle.getFollower(self,vehicle, dist=0.0)
-    #     follow_speed = vehicle.getFollowSpeed(self, follow_ID,)
-    #     # calculate the speed of the car in front
-
-    #     # calculate the density of cars on a certain edge in a given mile
-    #     edge_length = self.connection_info.edge_length_dict[current_edge]
-    #     vehicle_count = self.connection_info.edge_vehicle_count[current_edge] - 1
-
-    #     density = vehicle_count / edge_length
-    #     # if needed, finded the length of the edge
-
-    #     # first, calculate the del speed between vehicles and multiply by the k value
-
-    #     # wait another second or millisecond --> do the following again
-
-    #     return density_one, density_two, flow_rate_one, flow_rate_two
-
-    #     # more possible ideas 
-    #     # """ rely on previous vehicle info from for in loop to calculate  speed/velocity"""
+    # """ rely on previous vehicle info from for in loop to calculate  speed/velocity"""
 
 
     def __init__(self, connection_info):
@@ -173,12 +130,12 @@ class LWRController(RouteController):
         
 
         local_targets = {}
-        congested_edge = []
 
         for vehicle in vehicles:
             '''
             Your algo starts here
             '''
+            congested_edge_queue = Queue()
             decision_list = []
             
             # create a list of maps
@@ -191,13 +148,17 @@ class LWRController(RouteController):
             current_distance = self.connection_info.edge_length_dict[current_edge]
             unvisited[current_edge] = current_distance
             path_lists = {edge: [] for edge in self.connection_info.edge_list} #stores shortest path to each edge using directions
+
             
             # begin multithread operations and allow for communication between both threads
-            t1 = Thread(target = djikstra_thread, args=(self, vehicle, visited, unvisited, path_lists, current_edge,))
-            t2 = Thread(target = lwr_thread, args=(self, vehicle,))
+            t1 = Thread(target = djikstra_thread, args=(self, vehicle, visited, unvisited, path_lists, current_edge,congested_edge_queue,))
+            t2 = Thread(target = lwr_thread, args=(self, vehicle,congested_edge_queue,))
 
             t1.start()
             t2.start()
+
+            t1.join()
+            t2.join()
 
             '''
             Your algo ends here
@@ -226,12 +187,17 @@ class LWRController(RouteController):
         return flow_rate, density
 
     # djikstra policy thread
-    def djikstra_thread(self, vehicle, visited, unvisited, path_lists, current_edge):
+    def djikstra_thread(self, vehicle, visited, unvisited, path_lists, current_edge, congested_edge_queue):
+        global congested_edge
+        
         while True:
                 
                 if current_edge not in self.connection_info.outgoing_edges_dict.keys():
                     continue
-                                
+
+                if (congestion_event.isSet()):
+                    vehicle.reroute()
+
                 for direction, outgoing_edge in self.connection_info.outgoing_edges_dict[current_edge].items():
                     if outgoing_edge not in unvisited:
                         continue
@@ -259,9 +225,9 @@ class LWRController(RouteController):
                 possible_edges = [edge for edge in unvisited.items() if edge[1]]
                 current_edge, current_distance = sorted(possible_edges, key=lambda x: x[1])[0]
 
-        return null
+        return None
 
-    def diff_density_flow(self, vehicle):
+    def diff_density_flow(self, vehicle, congested_edge_queue):
         
         # calculate the flow rates and density rates between two time intervals
         flow_rate_one, density_one = self.calculate_density_flow(vehicle)
@@ -277,7 +243,25 @@ class LWRController(RouteController):
 
         return congestion_derivative
 
-    def lwr_thread(self, vehicle):
+    # LWR thread to determine congestion in any edge and reroute a car based on traffic congestion
+    def lwr_thread(self, vehicle, congested_edge_queue):
+        congestion_derivative
 
-        
-        return none
+        # a while loop that continues until the vehicle reaches its destination
+        while (vehicle.destination != vehicle.target_edge):
+
+            # checks to see if the vehicle is in the same edge as prior --> checks the congestion of the new edge
+            if (current_edge != vehicle.current_edge):
+                current_edge = vehicle.current_edge
+                time.sleep(2)
+                congestion_derivative = diff_density_flow(self, vehicle)
+
+            # checks the congestion of the current edge
+            elif (current_edge != vehicle.current_edge):
+                congestion_derivative = diff_density_flow(self, vehicle)
+
+            if (congestion_derivative < 0):
+                congested_edge_queue.put(vehicle.current_edge)
+                congestion_event.set()
+
+        return None
